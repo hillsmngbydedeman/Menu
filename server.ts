@@ -75,7 +75,7 @@ async function translateContent(text: string, description: string) {
     Format: { "name": { "en": "...", "ar": "...", "tr": "...", "ku": "..." }, "description": { "en": "...", "ar": "...", "tr": "...", "ku": "..." } }`;
 
     const response = await ai.models.generateContent({
-      model: "gemini-1.5-flash",
+      model: "gemini-3-flash-preview",
       contents: [{ parts: [{ text: prompt }] }],
       config: { responseMimeType: "application/json" }
     });
@@ -96,10 +96,22 @@ async function startServer() {
 
   app.use(express.json());
 
+  // Request logging for debugging
+  app.use((req, res, next) => {
+    if (req.path.startsWith('/api')) {
+      console.log(`${req.method} ${req.path}`);
+    }
+    next();
+  });
+
   // Settings API
   app.get("/api/settings", (req, res) => {
-    const settings = db.prepare("SELECT * FROM settings WHERE id = 1").get();
-    res.json(settings);
+    try {
+      const settings = db.prepare("SELECT * FROM settings WHERE id = 1").get();
+      res.json(settings || { hotel_name: 'Hills Hotel', currency: 'IQD' });
+    } catch (error) {
+      res.status(500).json({ error: "Failed to fetch settings" });
+    }
   });
 
   app.put("/api/settings", (req, res) => {
@@ -200,6 +212,11 @@ async function startServer() {
     const { status } = req.body;
     db.prepare("UPDATE orders SET status = ? WHERE id = ?").run(status, id);
     res.json({ success: true });
+  });
+
+  // API 404 handler - prevent falling through to Vite HTML for missing API routes
+  app.use("/api/*", (req, res) => {
+    res.status(404).json({ error: `API route not found: ${req.method} ${req.originalUrl}` });
   });
 
   // Vite middleware for development
