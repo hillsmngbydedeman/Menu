@@ -10,7 +10,15 @@ import { GoogleGenAI } from "@google/genai";
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
 
-const db = new Database("hotel.db");
+let db: any;
+try {
+  db = new Database("hotel.db");
+  console.log("Database connected successfully");
+} catch (error) {
+  console.error("Database connection failed:", error);
+  // Fallback to in-memory if file fails (though this shouldn't happen in this env)
+  db = new Database(":memory:");
+}
 const ai = new GoogleGenAI({ apiKey: process.env.GEMINI_API_KEY });
 
 // Initialize Database
@@ -96,127 +104,181 @@ async function startServer() {
 
   app.use(express.json());
 
-  // Request logging for debugging
+  // Global request logging
   app.use((req, res, next) => {
-    if (req.path.startsWith('/api')) {
-      console.log(`${req.method} ${req.path}`);
-    }
+    console.log(`[SERVER] ${req.method} ${req.url}`);
     next();
   });
 
+  const api = express.Router();
+
+  // Health check
+  api.get("/health", (req, res) => {
+    res.json({ status: "ok", time: new Date().toISOString() });
+  });
+
   // Settings API
-  app.get("/api/settings", (req, res) => {
+  api.get("/settings", (req, res) => {
     try {
       const settings = db.prepare("SELECT * FROM settings WHERE id = 1").get();
       res.json(settings || { hotel_name: 'Hills Hotel', currency: 'IQD' });
     } catch (error) {
+      console.error("Error fetching settings:", error);
       res.status(500).json({ error: "Failed to fetch settings" });
     }
   });
 
-  app.put("/api/settings", (req, res) => {
-    const { hotel_name, currency } = req.body;
-    db.prepare("UPDATE settings SET hotel_name = ?, currency = ? WHERE id = 1").run(hotel_name, currency);
-    res.json({ success: true });
+  api.put("/settings", (req, res) => {
+    try {
+      const { hotel_name, currency } = req.body;
+      db.prepare("UPDATE settings SET hotel_name = ?, currency = ? WHERE id = 1").run(hotel_name, currency);
+      res.json({ success: true });
+    } catch (error) {
+      res.status(500).json({ error: error.message });
+    }
   });
 
   // Categories API
-  app.get("/api/categories", (req, res) => {
-    const categories = db.prepare("SELECT * FROM categories").all();
-    res.json(categories);
+  api.get("/categories", (req, res) => {
+    try {
+      const categories = db.prepare("SELECT * FROM categories").all();
+      res.json(categories);
+    } catch (error) {
+      console.error("Error fetching categories:", error);
+      res.status(500).json({ error: "Failed to fetch categories" });
+    }
   });
 
-  app.get("/api/menu/:categorySlug", (req, res) => {
-    const { categorySlug } = req.params;
-    const items = db.prepare(`
-      SELECT m.* FROM menu_items m
-      JOIN categories c ON m.category_id = c.id
-      WHERE c.slug = ? AND m.available = 1
-    `).all(categorySlug);
-    res.json(items.map((i: any) => ({ ...i, translations: JSON.parse(i.translations || "{}") })));
+  api.get("/menu/:categorySlug", (req, res) => {
+    try {
+      const { categorySlug } = req.params;
+      const items = db.prepare(`
+        SELECT m.* FROM menu_items m
+        JOIN categories c ON m.category_id = c.id
+        WHERE c.slug = ? AND m.available = 1
+      `).all(categorySlug);
+      res.json(items.map((i: any) => ({ ...i, translations: JSON.parse(i.translations || "{}") })));
+    } catch (error) {
+      console.error(`Error fetching menu for ${req.params.categorySlug}:`, error);
+      res.status(500).json({ error: "Failed to fetch menu items" });
+    }
   });
 
-  app.get("/api/admin/menu/:categorySlug", (req, res) => {
-    const { categorySlug } = req.params;
-    const items = db.prepare(`
-      SELECT m.* FROM menu_items m
-      JOIN categories c ON m.category_id = c.id
-      WHERE c.slug = ?
-    `).all(categorySlug);
-    res.json(items.map((i: any) => ({ ...i, translations: JSON.parse(i.translations || "{}") })));
+  api.get("/admin/menu/:categorySlug", (req, res) => {
+    try {
+      const { categorySlug } = req.params;
+      const items = db.prepare(`
+        SELECT m.* FROM menu_items m
+        JOIN categories c ON m.category_id = c.id
+        WHERE c.slug = ?
+      `).all(categorySlug);
+      res.json(items.map((i: any) => ({ ...i, translations: JSON.parse(i.translations || "{}") })));
+    } catch (error) {
+      res.status(500).json({ error: error.message });
+    }
   });
 
-  app.post("/api/admin/menu", async (req, res) => {
-    const { category_id, name, description, price, image_url } = req.body;
-    const translations = await translateContent(name, description);
-    
-    const result = db.prepare("INSERT INTO menu_items (category_id, name, description, translations, price, image_url) VALUES (?, ?, ?, ?, ?, ?)").run(
-      category_id, name, description, JSON.stringify(translations), price, image_url
-    );
-    res.json({ id: result.lastInsertRowid });
-  });
-
-  app.put("/api/admin/menu/:id", async (req, res) => {
-    const { id } = req.params;
-    const { name, description, price, image_url, available } = req.body;
-    
-    // Re-translate if name or description changed
-    const existing = db.prepare("SELECT name, description FROM menu_items WHERE id = ?").get(id) as any;
-    let translationsStr;
-    if (existing.name !== name || existing.description !== description) {
+  api.post("/admin/menu", async (req, res) => {
+    try {
+      const { category_id, name, description, price, image_url } = req.body;
       const translations = await translateContent(name, description);
-      translationsStr = JSON.stringify(translations);
-    }
-
-    if (translationsStr) {
-      db.prepare("UPDATE menu_items SET name = ?, description = ?, translations = ?, price = ?, image_url = ?, available = ? WHERE id = ?").run(
-        name, description, translationsStr, price, image_url, available ? 1 : 0, id
+      
+      const result = db.prepare("INSERT INTO menu_items (category_id, name, description, translations, price, image_url) VALUES (?, ?, ?, ?, ?, ?)").run(
+        category_id, name, description, JSON.stringify(translations), price, image_url
       );
-    } else {
-      db.prepare("UPDATE menu_items SET name = ?, description = ?, price = ?, image_url = ?, available = ? WHERE id = ?").run(
-        name, description, price, image_url, available ? 1 : 0, id
-      );
+      res.json({ id: result.lastInsertRowid });
+    } catch (error) {
+      res.status(500).json({ error: error.message });
     }
-    res.json({ success: true });
   });
 
-  app.delete("/api/admin/menu/:id", (req, res) => {
-    const { id } = req.params;
-    db.prepare("DELETE FROM menu_items WHERE id = ?").run(id);
-    res.json({ success: true });
+  api.put("/admin/menu/:id", async (req, res) => {
+    try {
+      const { id } = req.params;
+      const { name, description, price, image_url, available } = req.body;
+      
+      const existing = db.prepare("SELECT name, description FROM menu_items WHERE id = ?").get(id) as any;
+      let translationsStr;
+      if (existing.name !== name || existing.description !== description) {
+        const translations = await translateContent(name, description);
+        translationsStr = JSON.stringify(translations);
+      }
+
+      if (translationsStr) {
+        db.prepare("UPDATE menu_items SET name = ?, description = ?, translations = ?, price = ?, image_url = ?, available = ? WHERE id = ?").run(
+          name, description, translationsStr, price, image_url, available ? 1 : 0, id
+        );
+      } else {
+        db.prepare("UPDATE menu_items SET name = ?, description = ?, price = ?, image_url = ?, available = ? WHERE id = ?").run(
+          name, description, price, image_url, available ? 1 : 0, id
+        );
+      }
+      res.json({ success: true });
+    } catch (error) {
+      res.status(500).json({ error: error.message });
+    }
   });
 
-  app.post("/api/orders", (req, res) => {
-    const { category_id, location, items, total_price, currency } = req.body;
-    const result = db.prepare("INSERT INTO orders (category_id, location, items, total_price, currency) VALUES (?, ?, ?, ?, ?)").run(
-      category_id, location, JSON.stringify(items), total_price, currency
-    );
-    const order = db.prepare("SELECT * FROM orders WHERE id = ?").get(result.lastInsertRowid);
-    io.emit("new_order", order);
-    res.json(order);
+  api.delete("/admin/menu/:id", (req, res) => {
+    try {
+      const { id } = req.params;
+      db.prepare("DELETE FROM menu_items WHERE id = ?").run(id);
+      res.json({ success: true });
+    } catch (error) {
+      res.status(500).json({ error: error.message });
+    }
   });
 
-  app.get("/api/admin/orders/:categorySlug", (req, res) => {
-    const { categorySlug } = req.params;
-    const orders = db.prepare(`
-      SELECT o.* FROM orders o
-      JOIN categories c ON o.category_id = c.id
-      WHERE c.slug = ?
-      ORDER BY o.created_at DESC
-    `).all(categorySlug);
-    res.json(orders.map((o: any) => ({ ...o, items: JSON.parse(o.items) })));
+  api.post("/orders", (req, res) => {
+    try {
+      const { category_id, location, items, total_price, currency } = req.body;
+      const result = db.prepare("INSERT INTO orders (category_id, location, items, total_price, currency) VALUES (?, ?, ?, ?, ?)").run(
+        category_id, location, JSON.stringify(items), total_price, currency
+      );
+      const order = db.prepare("SELECT * FROM orders WHERE id = ?").get(result.lastInsertRowid);
+      io.emit("new_order", order);
+      res.json(order);
+    } catch (error) {
+      res.status(500).json({ error: error.message });
+    }
   });
 
-  app.patch("/api/admin/orders/:id/status", (req, res) => {
-    const { id } = req.params;
-    const { status } = req.body;
-    db.prepare("UPDATE orders SET status = ? WHERE id = ?").run(status, id);
-    res.json({ success: true });
+  api.get("/admin/orders/:categorySlug", (req, res) => {
+    try {
+      const { categorySlug } = req.params;
+      const orders = db.prepare(`
+        SELECT o.* FROM orders o
+        JOIN categories c ON o.category_id = c.id
+        WHERE c.slug = ?
+        ORDER BY o.created_at DESC
+      `).all(categorySlug);
+      res.json(orders.map((o: any) => ({ ...o, items: JSON.parse(o.items) })));
+    } catch (error) {
+      res.status(500).json({ error: error.message });
+    }
   });
 
-  // API 404 handler - prevent falling through to Vite HTML for missing API routes
-  app.use("/api/*", (req, res) => {
-    res.status(404).json({ error: `API route not found: ${req.method} ${req.originalUrl}` });
+  api.patch("/admin/orders/:id/status", (req, res) => {
+    try {
+      const { id } = req.params;
+      const { status } = req.body;
+      db.prepare("UPDATE orders SET status = ? WHERE id = ?").run(status, id);
+      res.json({ success: true });
+    } catch (error) {
+      res.status(500).json({ error: error.message });
+    }
+  });
+
+  // API 404 handler
+  api.use((req, res) => {
+    res.status(404).json({ error: `API endpoint not found: ${req.method} ${req.originalUrl}` });
+  });
+
+  // Mount API router
+  app.use("/api", api);
+
+  app.get("/test-json", (req, res) => {
+    res.json({ test: "ok", time: new Date().toISOString() });
   });
 
   // Vite middleware for development
@@ -236,7 +298,10 @@ async function startServer() {
   const PORT = 3000;
   httpServer.listen(PORT, "0.0.0.0", () => {
     console.log(`Server running on http://0.0.0.0:${PORT}`);
+    console.log(`Environment: ${process.env.NODE_ENV || 'development'}`);
   });
 }
 
-startServer();
+startServer().catch(err => {
+  console.error("Failed to start server:", err);
+});
