@@ -60,23 +60,16 @@ async function startServer() {
     next();
   });
 
-  const api = express.Router();
+  // --- DIRECT API ROUTES (No Router for maximum reliability) ---
 
-  // Mount API router EARLY
-  app.use("/api", api);
-
-  // Health check on main app
-  app.get("/health-check", (req, res) => {
-    res.json({ status: "ok", service: "hills-hotel-api" });
-  });
-
-  // Health check on API router
-  api.get("/health", (req, res) => {
+  // Health check
+  app.get("/api/health", (req, res) => {
     res.json({ status: "ok", time: new Date().toISOString() });
   });
 
   // Settings API
-  api.get("/settings", async (req, res) => {
+  app.get("/api/settings", async (req, res) => {
+    console.log("[API] GET /api/settings");
     try {
       const { data, error } = await supabase.from("settings").select("*").eq("id", 1).single();
       if (error && error.code !== 'PGRST116') throw error;
@@ -87,7 +80,8 @@ async function startServer() {
     }
   });
 
-  api.put("/settings", async (req, res) => {
+  app.put("/api/settings", async (req, res) => {
+    console.log("[API] PUT /api/settings");
     try {
       const { hotel_name, currency } = req.body;
       const { error } = await supabase.from("settings").upsert({ id: 1, hotel_name, currency });
@@ -99,7 +93,8 @@ async function startServer() {
   });
 
   // Categories API
-  api.get("/categories", async (req, res) => {
+  app.get("/api/categories", async (req, res) => {
+    console.log("[API] GET /api/categories");
     try {
       const { data, error } = await supabase.from("categories").select("*");
       if (error) throw error;
@@ -110,11 +105,10 @@ async function startServer() {
     }
   });
 
-  api.get("/menu/:categorySlug", async (req, res) => {
+  app.get("/api/menu/:categorySlug", async (req, res) => {
+    console.log(`[API] GET /api/menu/${req.params.categorySlug}`);
     try {
       const { categorySlug } = req.params;
-      
-      // First get category id
       const { data: catData, error: catError } = await supabase.from("categories").select("id").eq("slug", categorySlug).single();
       if (catError) throw catError;
 
@@ -132,7 +126,7 @@ async function startServer() {
     }
   });
 
-  api.get("/admin/menu/:categorySlug", async (req, res) => {
+  app.get("/api/admin/menu/:categorySlug", async (req, res) => {
     try {
       const { categorySlug } = req.params;
       const { data: catData, error: catError } = await supabase.from("categories").select("id").eq("slug", categorySlug).single();
@@ -150,7 +144,7 @@ async function startServer() {
     }
   });
 
-  api.post("/admin/menu", async (req, res) => {
+  app.post("/api/admin/menu", async (req, res) => {
     try {
       const { category_id, name, description, price, image_url } = req.body;
       const translations = await translateContent(name, description);
@@ -166,7 +160,7 @@ async function startServer() {
     }
   });
 
-  api.put("/admin/menu/:id", async (req, res) => {
+  app.put("/api/admin/menu/:id", async (req, res) => {
     try {
       const { id } = req.params;
       const { name, description, price, image_url, available } = req.body;
@@ -191,7 +185,7 @@ async function startServer() {
     }
   });
 
-  api.delete("/admin/menu/:id", async (req, res) => {
+  app.delete("/api/admin/menu/:id", async (req, res) => {
     try {
       const { id } = req.params;
       const { error } = await supabase.from("menu_items").delete().eq("id", id);
@@ -202,7 +196,7 @@ async function startServer() {
     }
   });
 
-  api.post("/orders", async (req, res) => {
+  app.post("/api/orders", async (req, res) => {
     try {
       const { category_id, location, items, total_price, currency } = req.body;
       const { data, error } = await supabase.from("orders").insert({
@@ -217,7 +211,7 @@ async function startServer() {
     }
   });
 
-  api.get("/admin/orders/:categorySlug", async (req, res) => {
+  app.get("/api/admin/orders/:categorySlug", async (req, res) => {
     try {
       const { categorySlug } = req.params;
       const { data: catData, error: catError } = await supabase.from("categories").select("id").eq("slug", categorySlug).single();
@@ -236,7 +230,7 @@ async function startServer() {
     }
   });
 
-  api.patch("/admin/orders/:id/status", async (req, res) => {
+  app.patch("/api/admin/orders/:id/status", async (req, res) => {
     try {
       const { id } = req.params;
       const { status } = req.body;
@@ -248,10 +242,15 @@ async function startServer() {
     }
   });
 
-  // API 404 handler
-  api.use((req, res) => {
-    console.warn(`[API 404] ${req.method} ${req.originalUrl}`);
-    res.status(404).json({ error: `API endpoint not found: ${req.method} ${req.originalUrl}` });
+  // Catch-all for any /api requests that didn't match a route above
+  app.all("/api/*", (req, res) => {
+    console.warn(`[SERVER] 404 API: ${req.method} ${req.url}`);
+    res.status(404).json({ error: "API endpoint not found", method: req.method, path: req.url });
+  });
+
+  // Health check on main app (non-API)
+  app.get("/health-check", (req, res) => {
+    res.json({ status: "ok", service: "hills-hotel-api" });
   });
 
   // Vite middleware for development
