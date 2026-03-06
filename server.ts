@@ -43,7 +43,82 @@ async function translateContent(text: string, description: string) {
   }
 }
 
+async function seedDatabase() {
+  try {
+    console.log("[SEED] Checking for categories...");
+    const { data: categories, error: catError } = await supabase.from("categories").select("*");
+    if (catError) throw catError;
+
+    if (!categories || categories.length === 0) {
+      console.log("[SEED] Seeding categories...");
+      const { error: seedCatError } = await supabase.from("categories").insert([
+        { name: "Restaurant", slug: "restaurant" },
+        { name: "Cafe", slug: "cafe" },
+        { name: "Laundry", slug: "laundry" }
+      ]);
+      if (seedCatError) throw seedCatError;
+    }
+
+    const { data: menuItems, error: menuError } = await supabase.from("menu_items").select("*");
+    if (menuError) throw menuError;
+
+    if (!menuItems || menuItems.length === 0) {
+      console.log("[SEED] Seeding menu items...");
+      const { data: cats } = await supabase.from("categories").select("*");
+      const restaurantId = cats?.find(c => c.slug === 'restaurant')?.id;
+      const cafeId = cats?.find(c => c.slug === 'cafe')?.id;
+
+      if (restaurantId) {
+        await supabase.from("menu_items").insert([
+          { 
+            category_id: restaurantId, 
+            name: "Grilled Chicken", 
+            description: "Delicious grilled chicken with herbs", 
+            price: 15000, 
+            image_url: "https://picsum.photos/seed/chicken/400/300",
+            translations: {
+              name: { en: "Grilled Chicken", ar: "دجاج مشوي", tr: "Izgara Tavuk", ku: "مریشکی برژاو" },
+              description: { en: "Delicious grilled chicken with herbs", ar: "دجاج مشوي لذيذ مع الأعشاب", tr: "Otlu lezzetli ızgara tavuk", ku: "مریشکی برژاوی بەتام لەگەڵ سەوزەوات" }
+            }
+          },
+          { 
+            category_id: restaurantId, 
+            name: "Beef Burger", 
+            description: "Juicy beef burger with cheese", 
+            price: 12000, 
+            image_url: "https://picsum.photos/seed/burger/400/300",
+            translations: {
+              name: { en: "Beef Burger", ar: "برجر لحم", tr: "Dana Burger", ku: "بەرگری گۆشت" },
+              description: { en: "Juicy beef burger with cheese", ar: "برجر لحم بقري عصاري مع الجبن", tr: "Peynirli sulu dana burger", ku: "بەرگری گۆشتی بەتام لەگەڵ پەنیر" }
+            }
+          }
+        ]);
+      }
+
+      if (cafeId) {
+        await supabase.from("menu_items").insert([
+          { 
+            category_id: cafeId, 
+            name: "Cappuccino", 
+            description: "Classic Italian cappuccino", 
+            price: 5000, 
+            image_url: "https://picsum.photos/seed/coffee/400/300",
+            translations: {
+              name: { en: "Cappuccino", ar: "كابتشينو", tr: "Kapuçino", ku: "کاپوچینۆ" },
+              description: { en: "Classic Italian cappuccino", ar: "كابتشينو إيطالي كلاسيكي", tr: "Klasik İtalyan kapuçinosu", ku: "کاپوچینۆی ئیتاڵی کلاسیک" }
+            }
+          }
+        ]);
+      }
+    }
+    console.log("[SEED] Database seeding check complete.");
+  } catch (error) {
+    console.error("[SEED] Error seeding database:", error);
+  }
+}
+
 async function startServer() {
+  await seedDatabase();
   const app = express();
   const httpServer = createServer(app);
   const io = new Server(httpServer, {

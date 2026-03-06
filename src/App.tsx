@@ -31,7 +31,6 @@ function cn(...inputs: ClassValue[]) {
 const socket = io();
 
 const LANGUAGES = {
-  fa: { name: 'فارسی', dir: 'rtl' },
   en: { name: 'English', dir: 'ltr' },
   ar: { name: 'العربية', dir: 'rtl' },
   tr: { name: 'Türkçe', dir: 'ltr' },
@@ -39,34 +38,32 @@ const LANGUAGES = {
 };
 
 const UI_STRINGS: Record<string, Record<string, string>> = {
-  welcome: { fa: 'خوش آمدید', en: 'Welcome', ar: 'أهلاً بك', tr: 'Hoş geldiniz', ku: 'بەخێربێن' },
-  select_service: { fa: 'لطفاً سرویس مورد نظر خود را انتخاب کنید', en: 'Please select a service', ar: 'يرجى اختيار الخدمة', tr: 'Lütfen یک سرویس انتخاب کنید', ku: 'تکایە خزمەتگوزارییەک هەڵبژێرە' },
-  location: { fa: 'موقعیت شما', en: 'Your Location', ar: 'موقعك', tr: 'Konumunuz', ku: 'شوێنی تۆ' },
-  submit_order: { fa: 'ثبت سفارش', en: 'Submit Order', ar: 'إرسال الطلب', tr: 'Siparişi Gönder', ku: 'ناردنی داواکاری' },
-  order_success: { fa: 'سفارش شما با موفقیت ثبت شد', en: 'Order submitted successfully', ar: 'تم ارسال طلبك بنجاح', tr: 'Siparişiniz başarıyla gönderildi', ku: 'داواکارییەکەت بە سەرکەوتوویی ناردرا' },
-  items_selected: { fa: 'آیتم انتخاب شده', en: 'items selected', ar: 'عناصر مختارة', tr: 'öğe seçildi', ku: 'بڕگە هەڵبژێردراوە' },
-  admin_panel: { fa: 'پنل مدیریت', en: 'Admin Panel', ar: 'لوحة التحكم', tr: 'Yönetici Paneli', ku: 'پەنێڵی بەڕێوەبردن' },
-  hotel_sections: { fa: 'بخش‌های هتل', en: 'Hotel Sections', ar: 'أقسام الفندق', tr: 'Otel Bölümleri', ku: 'بەشەکانی هۆتێل' },
-  manage_desc: { fa: 'مدیریت سفارشات و منوی هر بخش', en: 'Manage orders and menu', ar: 'إدارة الطلبات والمنيو', tr: 'Siparişleri ve menüyü yönet', ku: 'بەڕێوەبردنی داواکارییەکان و مینیو' },
-  orders: { fa: 'سفارشات', en: 'Orders', ar: 'الطلبات', tr: 'Siparişler', ku: 'داواکارییەکان' },
-  menu_mgmt: { fa: 'مدیریت منو', en: 'Menu Management', ar: 'إدارة المنيو', tr: 'Menü Yönetimi', ku: 'بەڕێوەبردنی مینیو' },
-  settings: { fa: 'تنظیمات', en: 'Settings', ar: 'الإعدادات', tr: 'Ayarlar', ku: 'ڕێکخستنەکان' },
-  hotel_name: { fa: 'نام هتل', en: 'Hotel Name', ar: 'اسم الفندق', tr: 'Otel Adı', ku: 'ناوی هۆتێل' },
-  currency: { fa: 'واحد پول', en: 'Currency', ar: 'العملة', tr: 'Para Birimi', ku: 'دراو' },
-  save: { fa: 'ذخیره تغییرات', en: 'Save Changes', ar: 'حفظ التغييرات', tr: 'Değişiklikleri Kaydet', ku: 'پاشەکەوتکردنی گۆڕانکارییەکان' },
-  add_item: { fa: 'افزودن آیتم جدید', en: 'Add New Item', ar: 'إضافة عنصر جديد', tr: 'Yeni Öğe Ekle', ku: 'زیادکردنی بڕگەی نوێ' },
-  status_pending: { fa: 'در انتظار', en: 'Pending', ar: 'قيد الانتظار', tr: 'Beklemede', ku: 'چاوەڕوان' },
-  status_confirmed: { fa: 'تایید شده', en: 'Confirmed', ar: 'تم التأكيد', tr: 'Onaylandı', ku: 'پەسەندکراو' },
-  status_completed: { fa: 'تکمیل شده', en: 'Completed', ar: 'مكتمل', tr: 'Tamamlandı', ku: 'تەواوکراو' },
-  status_cancelled: { fa: 'لغو شده', en: 'Cancelled', ar: 'ملغي', tr: 'İptal edildi', ku: 'هەڵوەشاوەتەوە' },
-  select_location: { fa: 'کجا هستید؟', en: 'Where are you?', ar: 'أين أنت؟', tr: 'Neredesiniz?', ku: 'لە کوێیت؟' },
-  cafe: { fa: 'کافه', en: 'Cafe', ar: 'کافیه', tr: 'Kafe', ku: 'کافێ' },
-  restaurant: { fa: 'رستوران', en: 'Restaurant', ar: 'مطعم', tr: 'Restoran', ku: 'چێشتخانە' },
-  room: { fa: 'اتاق', en: 'Room', ar: 'غرفة', tr: 'Oda', ku: 'ژوور' },
-  room_number: { fa: 'شماره اتاق', en: 'Room Number', ar: 'رقم الغرفة', tr: 'Oda Numarası', ku: 'ژمارەی ژوور' },
-  enter_room_number: { fa: 'شماره اتاق خود را وارد کنید', en: 'Enter your room number', ar: 'أدخل رقم غرفتك', tr: 'Oda numaranızı girin', ku: 'ژمارەی ژوورەکەت بنووسە' },
-  continue: { fa: 'ادامه', en: 'Continue', ar: 'استمرار', tr: 'Devam et', ku: 'بەردەوام بە' },
-  change_location: { fa: 'تغییر موقعیت', en: 'Change Location', ar: 'تغيير الموقع', tr: 'Konumu Değiştir', ku: 'گۆڕینی شوێن' },
+  welcome: { en: 'Welcome', ar: 'أهلاً بك', tr: 'Hoş geldiniz', ku: 'بەخێربێن' },
+  select_service: { en: 'Please select a service', ar: 'يرجى اختيار الخدمة', tr: 'Lütfen یک سرویس انتخاب کنید', ku: 'تکایە خزمەتگوزارییەک هەڵبژێرە' },
+  location: { en: 'Your Location', ar: 'موقعك', tr: 'Konumunuz', ku: 'شوێنی تۆ' },
+  submit_order: { en: 'Submit Order', ar: 'إرسال الطلب', tr: 'Siparişi Gönder', ku: 'ناردنی داواکاری' },
+  order_success: { en: 'Order submitted successfully', ar: 'تم ارسال طلبك بنجاح', tr: 'Siparişiniz başarıyla gönderildi', ku: 'داواکارییەکەت بە سەرکەوتوویی ناردرا' },
+  items_selected: { en: 'items selected', ar: 'عناصر مختارة', tr: 'öğe seçildi', ku: 'بڕگە هەڵبژێردراوە' },
+  manage_desc: { en: 'Manage orders and menu', ar: 'إدارة الطلبات والمنيو', tr: 'Siparişleri ve menüyü yönet', ku: 'بەڕێوەبردنی داواکارییەکان و مینیو' },
+  orders: { en: 'Orders', ar: 'الطلبات', tr: 'Siparişler', ku: 'داواکارییەکان' },
+  menu_mgmt: { en: 'Menu Management', ar: 'إدارة المنيو', tr: 'Menü Yönetimi', ku: 'بەڕێوەبردنی مینیو' },
+  settings: { en: 'Settings', ar: 'الإعدادات', tr: 'Ayarlar', ku: 'ڕێکخستنەکان' },
+  hotel_name: { en: 'Hotel Name', ar: 'اسم الفندق', tr: 'Otel Adı', ku: 'ناوی هۆتێل' },
+  currency: { en: 'Currency', ar: 'العملة', tr: 'Para Birimi', ku: 'دراو' },
+  save: { en: 'Save Changes', ar: 'حفظ التغييرات', tr: 'Değişiklikleri Kaydet', ku: 'پاشەکەوتکردنی گۆڕانکارییەکان' },
+  add_item: { en: 'Add New Item', ar: 'إضافة عنصر جديد', tr: 'Yeni Öğe Ekle', ku: 'زیادکردنی بڕگەی نوێ' },
+  status_pending: { en: 'Pending', ar: 'قيد الانتظار', tr: 'Beklemede', ku: 'چاوەڕوان' },
+  status_confirmed: { en: 'Confirmed', ar: 'تم التأكيد', tr: 'Onaylandı', ku: 'پەسەندکراو' },
+  status_completed: { en: 'Completed', ar: 'مكتمل', tr: 'Tamamlandı', ku: 'تەواوکراو' },
+  status_cancelled: { en: 'Cancelled', ar: 'ملغي', tr: 'İptal edildi', ku: 'هەڵوەشاوەتەوە' },
+  select_location: { en: 'Where are you?', ar: 'أين أنت؟', tr: 'Neredesiniz?', ku: 'لە کوێیت؟' },
+  cafe: { en: 'Cafe', ar: 'کافیه', tr: 'Kafe', ku: 'کافێ' },
+  restaurant: { en: 'Restaurant', ar: 'مطعم', tr: 'Restoran', ku: 'چێشتخانە' },
+  room: { en: 'Room', ar: 'غرفة', tr: 'Oda', ku: 'ژوور' },
+  room_number: { en: 'Room Number', ar: 'رقم الغرفة', tr: 'Oda Numarası', ku: 'ژمارەی ژوور' },
+  enter_room_number: { en: 'Enter your room number', ar: 'أدخل رقم غرفتك', tr: 'Oda numaranızı girin', ku: 'ژمارەی ژوورەکەت بنووسە' },
+  continue: { en: 'Continue', ar: 'استمرار', tr: 'Devam et', ku: 'بەردەوام به' },
+  change_location: { en: 'Change Location', ar: 'تغيير الموقع', tr: 'Konumu Değiştir', ku: 'گۆڕینی شوێن' },
 };
 
 const Navbar = ({ title, showBack = false, admin = false, lang, setLang }: { title: string, showBack?: boolean, admin?: boolean, lang: string, setLang: (l: string) => void }) => {
@@ -698,8 +695,8 @@ const AdminMenu = ({ lang, setLang, settings }: { lang: string, setLang: (l: str
               <button onClick={() => setIsModalOpen(false)} className="text-slate-400 hover:text-slate-600"><X className="w-6 h-6" /></button>
             </div>
             <form onSubmit={handleSubmit} className="p-6 space-y-4">
-              <input type="text" required value={editingItem?.name} onChange={e => setEditingItem(prev => ({ ...prev!, name: e.target.value }))} className="w-full px-4 py-2 rounded-xl border border-slate-200" placeholder="Name (Persian)" />
-              <textarea value={editingItem?.description} onChange={e => setEditingItem(prev => ({ ...prev!, description: e.target.value }))} className="w-full px-4 py-2 rounded-xl border border-slate-200 h-24" placeholder="Description (Persian)" />
+              <input type="text" required value={editingItem?.name} onChange={e => setEditingItem(prev => ({ ...prev!, name: e.target.value }))} className="w-full px-4 py-2 rounded-xl border border-slate-200" placeholder="Name" />
+              <textarea value={editingItem?.description} onChange={e => setEditingItem(prev => ({ ...prev!, description: e.target.value }))} className="w-full px-4 py-2 rounded-xl border border-slate-200 h-24" placeholder="Description" />
               <input type="number" required value={editingItem?.price} onChange={e => setEditingItem(prev => ({ ...prev!, price: Number(e.target.value) }))} className="w-full px-4 py-2 rounded-xl border border-slate-200" placeholder="Price" />
               <input type="text" value={editingItem?.image_url} onChange={e => setEditingItem(prev => ({ ...prev!, image_url: e.target.value }))} className="w-full px-4 py-2 rounded-xl border border-slate-200" placeholder="Image URL" />
               <button type="submit" className="w-full bg-indigo-600 text-white py-3 rounded-xl font-bold">{t('save')}</button>
@@ -786,7 +783,7 @@ const AppContent = ({ lang, setLang, settings, fetchSettings, userLocation, setU
 };
 
 export default function App() {
-  const [lang, setLang] = useState('fa');
+  const [lang, setLang] = useState('en');
   const [settings, setSettings] = useState<HotelSettings | null>(null);
   const [userLocation, setUserLocation] = useState<{ type: string, roomNumber?: string } | null>(() => {
     const saved = localStorage.getItem('userLocation');
@@ -821,9 +818,9 @@ export default function App() {
         lang={lang} 
         setLang={setLang} 
         settings={settings} 
-        fetchSettings={fetchSettings} 
-        userLocation={userLocation} 
-        setUserLocation={setUserLocation} 
+        fetchSettings={fetchSettings}
+        userLocation={userLocation}
+        setUserLocation={setUserLocation}
       />
     </BrowserRouter>
   );
