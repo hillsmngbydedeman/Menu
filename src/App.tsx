@@ -212,7 +212,13 @@ const Home = ({ lang, setLang, settings, userLocation, setUserLocation }: {
   };
 
   useEffect(() => {
-    fetch('/api/categories').then(res => res.json()).then(setCategories);
+    fetch('/api/categories')
+      .then(res => {
+        if (!res.ok) throw new Error(`HTTP error! status: ${res.status}`);
+        return res.json();
+      })
+      .then(setCategories)
+      .catch(err => console.error("Error fetching categories:", err));
     document.body.dir = LANGUAGES[lang as keyof typeof LANGUAGES].dir;
   }, [lang]);
 
@@ -298,8 +304,20 @@ const Menu = ({ lang, setLang, settings, userLocation }: {
       navigate('/');
       return;
     }
-    fetch(`/api/menu/${slug}`).then(res => res.json()).then(setItems);
-    fetch('/api/categories').then(res => res.json()).then(setCategories);
+    fetch(`/api/menu/${slug}`)
+      .then(res => {
+        if (!res.ok) throw new Error(`HTTP error! status: ${res.status}`);
+        return res.json();
+      })
+      .then(setItems)
+      .catch(err => console.error("Error fetching menu items:", err));
+    fetch('/api/categories')
+      .then(res => {
+        if (!res.ok) throw new Error(`HTTP error! status: ${res.status}`);
+        return res.json();
+      })
+      .then(setCategories)
+      .catch(err => console.error("Error fetching categories:", err));
   }, [slug, userLocation]);
 
   const currentCategory = categories.find(c => c.slug === slug);
@@ -335,21 +353,29 @@ const Menu = ({ lang, setLang, settings, userLocation }: {
       ? `${t('room')} ${userLocation.roomNumber}` 
       : t(userLocation.type);
 
-    const res = await fetch('/api/orders', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({
-        category_id: currentCategory?.id,
-        location: locationLabel,
-        items: orderItems,
-        total_price: totalPrice,
-        currency: settings?.currency
-      })
-    });
+    try {
+      const res = await fetch('/api/orders', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          category_id: currentCategory?.id,
+          location: locationLabel,
+          items: orderItems,
+          total_price: totalPrice,
+          currency: settings?.currency
+        })
+      });
 
-    if (res.ok) {
-      alert(t('order_success'));
-      navigate('/');
+      if (res.ok) {
+        alert(t('order_success'));
+        navigate('/');
+      } else {
+        const errData = await res.json();
+        throw new Error(errData.error || 'Failed to submit order');
+      }
+    } catch (error) {
+      console.error("Order submission error:", error);
+      alert('Error submitting order. Please try again.');
     }
   };
 
@@ -416,7 +442,13 @@ const AdminDashboard = ({ lang, setLang }: { lang: string, setLang: (l: string) 
   };
 
   useEffect(() => {
-    fetch('/api/categories').then(res => res.json()).then(setCategories);
+    fetch('/api/categories')
+      .then(res => {
+        if (!res.ok) throw new Error(`HTTP error! status: ${res.status}`);
+        return res.json();
+      })
+      .then(setCategories)
+      .catch(err => console.error("Error fetching categories:", err));
   }, []);
 
   return (
@@ -463,12 +495,24 @@ const AdminOrders = ({ lang, setLang, settings }: { lang: string, setLang: (l: s
   };
 
   const fetchOrders = () => {
-    fetch(`/api/admin/orders/${slug}`).then(res => res.json()).then(setOrders);
+    fetch(`/api/admin/orders/${slug}`)
+      .then(res => {
+        if (!res.ok) throw new Error(`HTTP error! status: ${res.status}`);
+        return res.json();
+      })
+      .then(setOrders)
+      .catch(err => console.error("Error fetching orders:", err));
   };
 
   useEffect(() => {
     fetchOrders();
-    fetch('/api/categories').then(res => res.json()).then(setCategories);
+    fetch('/api/categories')
+      .then(res => {
+        if (!res.ok) throw new Error(`HTTP error! status: ${res.status}`);
+        return res.json();
+      })
+      .then(setCategories)
+      .catch(err => console.error("Error fetching categories:", err));
     socket.on('new_order', (order) => {
       const cat = categories.find(c => c.id === order.category_id);
       if (cat?.slug === slug) fetchOrders();
@@ -477,12 +521,21 @@ const AdminOrders = ({ lang, setLang, settings }: { lang: string, setLang: (l: s
   }, [slug, categories]);
 
   const updateStatus = async (id: number, status: string) => {
-    await fetch(`/api/admin/orders/${id}/status`, {
-      method: 'PATCH',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ status })
-    });
-    fetchOrders();
+    try {
+      const res = await fetch(`/api/admin/orders/${id}/status`, {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ status })
+      });
+      if (!res.ok) {
+        const errData = await res.json();
+        throw new Error(errData.error || 'Failed to update status');
+      }
+      fetchOrders();
+    } catch (error) {
+      console.error("Status update error:", error);
+      alert('Error updating order status.');
+    }
   };
 
   const currentCategory = categories.find(c => c.slug === slug);
@@ -553,26 +606,50 @@ const AdminMenu = ({ lang, setLang, settings }: { lang: string, setLang: (l: str
   };
 
   const fetchItems = () => {
-    fetch(`/api/admin/menu/${slug}`).then(res => res.json()).then(setItems);
+    fetch(`/api/admin/menu/${slug}`)
+      .then(res => {
+        if (!res.ok) throw new Error(`HTTP error! status: ${res.status}`);
+        return res.json();
+      })
+      .then(setItems)
+      .catch(err => console.error("Error fetching menu items:", err));
   };
 
   useEffect(() => {
     fetchItems();
-    fetch('/api/categories').then(res => res.json()).then(setCategories);
+    fetch('/api/categories')
+      .then(res => {
+        if (!res.ok) throw new Error(`HTTP error! status: ${res.status}`);
+        return res.json();
+      })
+      .then(setCategories)
+      .catch(err => console.error("Error fetching categories:", err));
   }, [slug]);
 
   const currentCategory = categories.find(c => c.slug === slug);
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
-    const method = editingItem?.id ? 'PUT' : 'POST';
-    const url = editingItem?.id ? `/api/admin/menu/${editingItem.id}` : '/api/admin/menu';
-    const res = await fetch(url, {
-      method,
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ ...editingItem, category_id: currentCategory?.id })
-    });
-    if (res.ok) { setIsModalOpen(false); setEditingItem(null); fetchItems(); }
+    try {
+      const method = editingItem?.id ? 'PUT' : 'POST';
+      const url = editingItem?.id ? `/api/admin/menu/${editingItem.id}` : '/api/admin/menu';
+      const res = await fetch(url, {
+        method,
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ ...editingItem, category_id: currentCategory?.id })
+      });
+      if (res.ok) { 
+        setIsModalOpen(false); 
+        setEditingItem(null); 
+        fetchItems(); 
+      } else {
+        const errData = await res.json();
+        throw new Error(errData.error || 'Failed to save menu item');
+      }
+    } catch (error) {
+      console.error("Menu item save error:", error);
+      alert('Error saving menu item.');
+    }
   };
 
   return (
@@ -593,7 +670,21 @@ const AdminMenu = ({ lang, setLang, settings }: { lang: string, setLang: (l: str
               </div>
               <div className="flex gap-2">
                 <button onClick={() => { setEditingItem(item); setIsModalOpen(true); }} className="p-2 text-slate-400 hover:text-blue-600 transition-colors"><Edit className="w-5 h-5" /></button>
-                <button onClick={async () => { if (confirm('?')) { await fetch(`/api/admin/menu/${item.id}`, { method: 'DELETE' }); fetchItems(); } }} className="p-2 text-slate-400 hover:text-red-600 transition-colors"><Trash2 className="w-5 h-5" /></button>
+                <button onClick={async () => { 
+                  if (confirm('Are you sure you want to delete this item?')) { 
+                    try {
+                      const res = await fetch(`/api/admin/menu/${item.id}`, { method: 'DELETE' });
+                      if (!res.ok) {
+                        const errData = await res.json();
+                        throw new Error(errData.error || 'Failed to delete item');
+                      }
+                      fetchItems(); 
+                    } catch (error) {
+                      console.error("Delete error:", error);
+                      alert('Error deleting item.');
+                    }
+                  } 
+                }} className="p-2 text-slate-400 hover:text-red-600 transition-colors"><Trash2 className="w-5 h-5" /></button>
               </div>
             </div>
           ))}
@@ -630,13 +721,22 @@ const AdminSettings = ({ lang, setLang, settings, fetchSettings }: { lang: strin
 
   const handleSave = async (e: React.FormEvent) => {
     e.preventDefault();
-    await fetch('/api/settings', {
-      method: 'PUT',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ hotel_name: hotelName, currency })
-    });
-    fetchSettings();
-    alert(t('order_success'));
+    try {
+      const res = await fetch('/api/settings', {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ hotel_name: hotelName, currency })
+      });
+      if (!res.ok) {
+        const errData = await res.json();
+        throw new Error(errData.error || 'Failed to save settings');
+      }
+      fetchSettings();
+      alert(t('order_success'));
+    } catch (error) {
+      console.error("Settings save error:", error);
+      alert('Error saving settings.');
+    }
   };
 
   return (
@@ -694,7 +794,13 @@ export default function App() {
   });
 
   const fetchSettings = () => {
-    fetch('/api/settings').then(res => res.json()).then(setSettings);
+    fetch('/api/settings')
+      .then(res => {
+        if (!res.ok) throw new Error(`HTTP error! status: ${res.status}`);
+        return res.json();
+      })
+      .then(setSettings)
+      .catch(err => console.error("Error fetching settings:", err));
   };
 
   useEffect(() => {

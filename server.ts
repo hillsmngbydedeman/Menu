@@ -13,6 +13,11 @@ const __dirname = path.dirname(__filename);
 // Supabase Client
 const supabaseUrl = process.env.SUPABASE_URL || "";
 const supabaseKey = process.env.SUPABASE_ANON_KEY || "";
+
+if (!supabaseUrl || !supabaseKey) {
+  console.warn("[SERVER] WARNING: SUPABASE_URL or SUPABASE_ANON_KEY is missing. Database features will fail.");
+}
+
 const supabase = createClient(supabaseUrl, supabaseKey);
 
 const ai = new GoogleGenAI({ apiKey: process.env.GEMINI_API_KEY });
@@ -49,13 +54,23 @@ async function startServer() {
 
   // Global request logging
   app.use((req, res, next) => {
-    console.log(`[SERVER] ${req.method} ${req.url}`);
+    if (req.url.startsWith('/api') || req.url.startsWith('/health')) {
+      console.log(`[SERVER] ${req.method} ${req.url}`);
+    }
     next();
   });
 
   const api = express.Router();
 
-  // Health check
+  // Mount API router EARLY
+  app.use("/api", api);
+
+  // Health check on main app
+  app.get("/health-check", (req, res) => {
+    res.json({ status: "ok", service: "hills-hotel-api" });
+  });
+
+  // Health check on API router
   api.get("/health", (req, res) => {
     res.json({ status: "ok", time: new Date().toISOString() });
   });
@@ -235,14 +250,8 @@ async function startServer() {
 
   // API 404 handler
   api.use((req, res) => {
+    console.warn(`[API 404] ${req.method} ${req.originalUrl}`);
     res.status(404).json({ error: `API endpoint not found: ${req.method} ${req.originalUrl}` });
-  });
-
-  // Mount API router
-  app.use("/api", api);
-
-  app.get("/test-json", (req, res) => {
-    res.json({ test: "ok", time: new Date().toISOString() });
   });
 
   // Vite middleware for development
@@ -258,6 +267,12 @@ async function startServer() {
       res.sendFile(path.join(__dirname, "dist", "index.html"));
     });
   }
+
+  // Global error handler
+  app.use((err: any, req: express.Request, res: express.Response, next: express.NextFunction) => {
+    console.error("[GLOBAL ERROR]", err);
+    res.status(500).json({ error: "Internal Server Error", message: err.message });
+  });
 
   const PORT = 3000;
   httpServer.listen(PORT, "0.0.0.0", () => {
