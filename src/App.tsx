@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useMemo } from 'react';
-import { BrowserRouter, Routes, Route, Link, useParams, useSearchParams, useNavigate } from 'react-router-dom';
+import { BrowserRouter, Routes, Route, Link, useParams, useSearchParams, useNavigate, useLocation } from 'react-router-dom';
 import { motion, AnimatePresence } from 'motion/react';
 import { 
   Utensils, 
@@ -59,6 +59,14 @@ const UI_STRINGS: Record<string, Record<string, string>> = {
   status_confirmed: { fa: 'تایید شده', en: 'Confirmed', ar: 'تم التأكيد', tr: 'Onaylandı', ku: 'پەسەندکراو' },
   status_completed: { fa: 'تکمیل شده', en: 'Completed', ar: 'مكتمل', tr: 'Tamamlandı', ku: 'تەواوکراو' },
   status_cancelled: { fa: 'لغو شده', en: 'Cancelled', ar: 'ملغي', tr: 'İptal edildi', ku: 'هەڵوەشاوەتەوە' },
+  select_location: { fa: 'کجا هستید؟', en: 'Where are you?', ar: 'أين أنت؟', tr: 'Neredesiniz?', ku: 'لە کوێیت؟' },
+  cafe: { fa: 'کافه', en: 'Cafe', ar: 'کافیه', tr: 'Kafe', ku: 'کافێ' },
+  restaurant: { fa: 'رستوران', en: 'Restaurant', ar: 'مطعم', tr: 'Restoran', ku: 'چێشتخانە' },
+  room: { fa: 'اتاق', en: 'Room', ar: 'غرفة', tr: 'Oda', ku: 'ژوور' },
+  room_number: { fa: 'شماره اتاق', en: 'Room Number', ar: 'رقم الغرفة', tr: 'Oda Numarası', ku: 'ژمارەی ژوور' },
+  enter_room_number: { fa: 'شماره اتاق خود را وارد کنید', en: 'Enter your room number', ar: 'أدخل رقم غرفتك', tr: 'Oda numaranızı girin', ku: 'ژمارەی ژوورەکەت بنووسە' },
+  continue: { fa: 'ادامه', en: 'Continue', ar: 'استمرار', tr: 'Devam et', ku: 'بەردەوام بە' },
+  change_location: { fa: 'تغییر موقعیت', en: 'Change Location', ar: 'تغيير الموقع', tr: 'Konumu Değiştir', ku: 'گۆڕینی شوێن' },
 };
 
 const Navbar = ({ title, showBack = false, admin = false, lang, setLang }: { title: string, showBack?: boolean, admin?: boolean, lang: string, setLang: (l: string) => void }) => {
@@ -77,16 +85,21 @@ const Navbar = ({ title, showBack = false, admin = false, lang, setLang }: { tit
         <select 
           value={lang} 
           onChange={(e) => setLang(e.target.value)}
-          className="text-xs bg-white border border-slate-200 rounded-lg px-2 py-1 outline-none"
+          className="text-xs bg-white border border-slate-200 rounded-lg px-2 py-1 outline-none font-medium"
         >
           {Object.entries(LANGUAGES).map(([code, { name }]) => (
             <option key={code} value={code}>{name}</option>
           ))}
         </select>
         {admin ? (
-           <Link to="/admin/settings" className="p-2 text-slate-500 hover:text-indigo-600 transition-colors">
-            <Settings className="w-5 h-5" />
-          </Link>
+          <div className="flex items-center gap-1">
+            <Link to="/admin/settings" className="p-2 text-slate-500 hover:text-indigo-600 transition-colors">
+              <Settings className="w-5 h-5" />
+            </Link>
+            <Link to="/" className="p-2 text-slate-500 hover:text-red-600 transition-colors">
+              <X className="w-5 h-5" />
+            </Link>
+          </div>
         ) : (
           <Link to="/admin" className="p-2 text-slate-400 hover:text-slate-600 transition-colors">
             <LayoutDashboard className="w-5 h-5" />
@@ -99,16 +112,111 @@ const Navbar = ({ title, showBack = false, admin = false, lang, setLang }: { tit
 
 // --- Customer Views ---
 
-const Home = ({ lang, setLang, settings }: { lang: string, setLang: (l: string) => void, settings: HotelSettings | null }) => {
+const LocationSelector = ({ lang, onSelect }: { lang: string, onSelect: (loc: { type: string, roomNumber?: string }) => void }) => {
+  const [type, setType] = useState<string | null>(null);
+  const [roomNumber, setRoomNumber] = useState('');
+  const t = (key: string) => UI_STRINGS[key][lang] || UI_STRINGS[key]['en'];
+
+  const handleContinue = () => {
+    if (type === 'room' && !roomNumber) return;
+    onSelect({ type: type!, roomNumber: type === 'room' ? roomNumber : undefined });
+  };
+
+  return (
+    <div className="fixed inset-0 z-[100] bg-white flex flex-col items-center justify-center p-6">
+      <motion.div 
+        initial={{ opacity: 0, y: 20 }}
+        animate={{ opacity: 1, y: 0 }}
+        className="w-full max-w-md space-y-8"
+      >
+        <div className="text-center space-y-2">
+          <h2 className="text-3xl font-bold text-slate-900">{t('select_location')}</h2>
+          <p className="text-slate-500">{t('select_service')}</p>
+        </div>
+
+        <div className="grid gap-4">
+          {[
+            { id: 'cafe', icon: <Coffee />, label: t('cafe') },
+            { id: 'restaurant', icon: <Utensils />, label: t('restaurant') },
+            { id: 'room', icon: <Shirt />, label: t('room') }
+          ].map((loc) => (
+            <button
+              key={loc.id}
+              onClick={() => setType(loc.id)}
+              className={cn(
+                "flex items-center gap-4 p-5 rounded-2xl border-2 transition-all text-left",
+                type === loc.id 
+                  ? "border-indigo-600 bg-indigo-50 text-indigo-700 shadow-sm" 
+                  : "border-slate-100 bg-white text-slate-600 hover:border-indigo-200"
+              )}
+            >
+              <div className={cn(
+                "w-12 h-12 rounded-xl flex items-center justify-center",
+                type === loc.id ? "bg-indigo-600 text-white" : "bg-slate-100 text-slate-400"
+              )}>
+                {loc.icon}
+              </div>
+              <span className="text-lg font-bold">{loc.label}</span>
+              {type === loc.id && <Check className="w-6 h-6 ml-auto" />}
+            </button>
+          ))}
+        </div>
+
+        <AnimatePresence>
+          {type === 'room' && (
+            <motion.div
+              initial={{ opacity: 0, height: 0 }}
+              animate={{ opacity: 1, height: 'auto' }}
+              exit={{ opacity: 0, height: 0 }}
+              className="space-y-2"
+            >
+              <label className="text-sm font-medium text-slate-700">{t('room_number')}</label>
+              <input
+                type="text"
+                value={roomNumber}
+                onChange={(e) => setRoomNumber(e.target.value)}
+                placeholder={t('enter_room_number')}
+                className="w-full px-5 py-4 rounded-2xl border-2 border-slate-100 focus:border-indigo-600 outline-none transition-all text-lg font-bold"
+                autoFocus
+              />
+            </motion.div>
+          )}
+        </AnimatePresence>
+
+        <button
+          disabled={!type || (type === 'room' && !roomNumber)}
+          onClick={handleContinue}
+          className="w-full bg-indigo-600 text-white py-5 rounded-2xl font-bold text-lg shadow-lg shadow-indigo-200 hover:bg-indigo-700 disabled:opacity-50 disabled:shadow-none transition-all"
+        >
+          {t('continue')}
+        </button>
+      </motion.div>
+    </div>
+  );
+};
+
+const Home = ({ lang, setLang, settings, userLocation, setUserLocation }: { 
+  lang: string, 
+  setLang: (l: string) => void, 
+  settings: HotelSettings | null,
+  userLocation: { type: string, roomNumber?: string } | null,
+  setUserLocation: (l: any) => void
+}) => {
   const [categories, setCategories] = useState<Category[]>([]);
-  const [searchParams] = useSearchParams();
-  const location = searchParams.get('location') || '---';
   const t = (key: string) => UI_STRINGS[key][lang] || UI_STRINGS[key]['en'];
 
   useEffect(() => {
     fetch('/api/categories').then(res => res.json()).then(setCategories);
     document.body.dir = LANGUAGES[lang as keyof typeof LANGUAGES].dir;
   }, [lang]);
+
+  const filteredCategories = useMemo(() => {
+    if (!userLocation) return [];
+    if (userLocation.type === 'cafe') return categories.filter(c => c.slug === 'cafe');
+    if (userLocation.type === 'restaurant') return categories.filter(c => c.slug === 'restaurant');
+    if (userLocation.type === 'room') return categories.filter(c => c.slug === 'restaurant' || c.slug === 'laundry');
+    return categories;
+  }, [categories, userLocation]);
 
   const getIcon = (slug: string) => {
     switch (slug) {
@@ -119,24 +227,32 @@ const Home = ({ lang, setLang, settings }: { lang: string, setLang: (l: string) 
     }
   };
 
+  const locationLabel = userLocation?.type === 'room' 
+    ? `${t('room')} ${userLocation.roomNumber}` 
+    : t(userLocation?.type || '');
+
   return (
     <div className="min-h-screen bg-slate-50">
       <Navbar title={settings?.hotel_name || 'Hills Hotel'} lang={lang} setLang={setLang} />
       <main className="p-6 max-w-2xl mx-auto">
         <div className="mb-8 text-center">
-          <div className="inline-flex items-center gap-2 px-3 py-1 bg-indigo-100 text-indigo-700 rounded-full text-sm font-medium mb-4">
+          <button 
+            onClick={() => setUserLocation(null)}
+            className="inline-flex items-center gap-2 px-4 py-2 bg-indigo-100 text-indigo-700 rounded-full text-sm font-bold mb-4 hover:bg-indigo-200 transition-colors"
+          >
             <MapPin className="w-4 h-4" />
-            {t('location')}: {location}
-          </div>
+            {t('location')}: {locationLabel}
+            <Edit className="w-3 h-3 ml-1" />
+          </button>
           <h2 className="text-3xl font-bold text-slate-900 mb-2">{t('welcome')}</h2>
           <p className="text-slate-500">{t('select_service')}</p>
         </div>
 
         <div className="grid gap-4">
-          {categories.map((cat) => (
+          {filteredCategories.map((cat) => (
             <Link 
               key={cat.id} 
-              to={`/menu/${cat.slug}?location=${location}`}
+              to={`/menu/${cat.slug}`}
               className="group relative overflow-hidden bg-white p-6 rounded-2xl shadow-sm border border-slate-100 hover:shadow-md transition-all flex items-center gap-6"
             >
               <div className="w-16 h-16 rounded-xl bg-indigo-50 text-indigo-600 flex items-center justify-center group-hover:bg-indigo-600 group-hover:text-white transition-colors">
@@ -155,10 +271,13 @@ const Home = ({ lang, setLang, settings }: { lang: string, setLang: (l: string) 
   );
 };
 
-const Menu = ({ lang, setLang, settings }: { lang: string, setLang: (l: string) => void, settings: HotelSettings | null }) => {
+const Menu = ({ lang, setLang, settings, userLocation }: { 
+  lang: string, 
+  setLang: (l: string) => void, 
+  settings: HotelSettings | null,
+  userLocation: { type: string, roomNumber?: string } | null
+}) => {
   const { slug } = useParams();
-  const [searchParams] = useSearchParams();
-  const location = searchParams.get('location') || '---';
   const [items, setItems] = useState<MenuItem[]>([]);
   const [cart, setCart] = useState<Record<number, number>>({});
   const [categories, setCategories] = useState<Category[]>([]);
@@ -166,9 +285,13 @@ const Menu = ({ lang, setLang, settings }: { lang: string, setLang: (l: string) 
   const t = (key: string) => UI_STRINGS[key][lang] || UI_STRINGS[key]['en'];
 
   useEffect(() => {
+    if (!userLocation) {
+      navigate('/');
+      return;
+    }
     fetch(`/api/menu/${slug}`).then(res => res.json()).then(setItems);
     fetch('/api/categories').then(res => res.json()).then(setCategories);
-  }, [slug]);
+  }, [slug, userLocation]);
 
   const currentCategory = categories.find(c => c.slug === slug);
 
@@ -188,7 +311,7 @@ const Menu = ({ lang, setLang, settings }: { lang: string, setLang: (l: string) 
   const totalPrice: number = items.reduce((sum: number, item: MenuItem) => sum + (item.price * (cart[item.id] || 0)), 0);
 
   const handleOrder = async () => {
-    if (cartCount === 0) return;
+    if (cartCount === 0 || !userLocation) return;
     
     const orderItems = items
       .filter(item => cart[item.id])
@@ -199,12 +322,16 @@ const Menu = ({ lang, setLang, settings }: { lang: string, setLang: (l: string) 
         quantity: cart[item.id]
       }));
 
+    const locationLabel = userLocation.type === 'room' 
+      ? `${t('room')} ${userLocation.roomNumber}` 
+      : t(userLocation.type);
+
     const res = await fetch('/api/orders', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({
         category_id: currentCategory?.id,
-        location,
+        location: locationLabel,
         items: orderItems,
         total_price: totalPrice,
         currency: settings?.currency
@@ -237,7 +364,7 @@ const Menu = ({ lang, setLang, settings }: { lang: string, setLang: (l: string) 
                   <p className="text-xs text-slate-500 line-clamp-2">{item.translations?.description?.[lang] || item.description}</p>
                 </div>
                 <div className="flex items-center justify-between mt-2">
-                  <span className="font-bold text-indigo-600">{totalPrice.toLocaleString()} {settings?.currency}</span>
+                  <span className="font-bold text-indigo-600">{item.price.toLocaleString()} {settings?.currency}</span>
                   <div className="flex items-center gap-3 bg-slate-50 rounded-lg p-1">
                     <button onClick={() => updateCart(item.id, -1)} className="p-1 text-slate-400 hover:text-red-500 transition-colors"><Minus className="w-4 h-4" /></button>
                     <span className="w-4 text-center font-medium">{cart[item.id] || 0}</span>
@@ -514,9 +641,36 @@ const AdminSettings = ({ lang, setLang, settings, fetchSettings }: { lang: strin
   );
 };
 
+const AppContent = ({ lang, setLang, settings, fetchSettings, userLocation, setUserLocation }: any) => {
+  const location = useLocation();
+  const isAdmin = location.pathname.startsWith('/admin');
+
+  return (
+    <>
+      <AnimatePresence mode="wait">
+        {!userLocation && !isAdmin && (
+          <LocationSelector lang={lang} onSelect={setUserLocation} />
+        )}
+      </AnimatePresence>
+      <Routes>
+        <Route path="/" element={<Home lang={lang} setLang={setLang} settings={settings} userLocation={userLocation} setUserLocation={setUserLocation} />} />
+        <Route path="/menu/:slug" element={<Menu lang={lang} setLang={setLang} settings={settings} userLocation={userLocation} />} />
+        <Route path="/admin" element={<AdminDashboard lang={lang} setLang={setLang} />} />
+        <Route path="/admin/orders/:slug" element={<AdminOrders lang={lang} setLang={setLang} settings={settings} />} />
+        <Route path="/admin/menu/:slug" element={<AdminMenu lang={lang} setLang={setLang} settings={settings} />} />
+        <Route path="/admin/settings" element={<AdminSettings lang={lang} setLang={setLang} settings={settings} fetchSettings={fetchSettings} />} />
+      </Routes>
+    </>
+  );
+};
+
 export default function App() {
   const [lang, setLang] = useState('fa');
   const [settings, setSettings] = useState<HotelSettings | null>(null);
+  const [userLocation, setUserLocation] = useState<{ type: string, roomNumber?: string } | null>(() => {
+    const saved = localStorage.getItem('userLocation');
+    return saved ? JSON.parse(saved) : null;
+  });
 
   const fetchSettings = () => {
     fetch('/api/settings').then(res => res.json()).then(setSettings);
@@ -526,16 +680,24 @@ export default function App() {
     fetchSettings();
   }, []);
 
+  useEffect(() => {
+    if (userLocation) {
+      localStorage.setItem('userLocation', JSON.stringify(userLocation));
+    } else {
+      localStorage.removeItem('userLocation');
+    }
+  }, [userLocation]);
+
   return (
     <BrowserRouter>
-      <Routes>
-        <Route path="/" element={<Home lang={lang} setLang={setLang} settings={settings} />} />
-        <Route path="/menu/:slug" element={<Menu lang={lang} setLang={setLang} settings={settings} />} />
-        <Route path="/admin" element={<AdminDashboard lang={lang} setLang={setLang} />} />
-        <Route path="/admin/orders/:slug" element={<AdminOrders lang={lang} setLang={setLang} settings={settings} />} />
-        <Route path="/admin/menu/:slug" element={<AdminMenu lang={lang} setLang={setLang} settings={settings} />} />
-        <Route path="/admin/settings" element={<AdminSettings lang={lang} setLang={setLang} settings={settings} fetchSettings={fetchSettings} />} />
-      </Routes>
+      <AppContent 
+        lang={lang} 
+        setLang={setLang} 
+        settings={settings} 
+        fetchSettings={fetchSettings} 
+        userLocation={userLocation} 
+        setUserLocation={setUserLocation} 
+      />
     </BrowserRouter>
   );
 }

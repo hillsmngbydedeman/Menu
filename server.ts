@@ -2,7 +2,7 @@ import express from "express";
 import { createServer } from "http";
 import { Server } from "socket.io";
 import { createServer as createViteServer } from "vite";
-import Database from "better-sqlite3";
+import { createClient } from "@supabase/supabase-js";
 import path from "path";
 import { fileURLToPath } from "url";
 import { GoogleGenAI } from "@google/genai";
@@ -10,69 +10,12 @@ import { GoogleGenAI } from "@google/genai";
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
 
-let db: any;
-try {
-  db = new Database("hotel.db");
-  console.log("Database connected successfully");
-} catch (error) {
-  console.error("Database connection failed:", error);
-  // Fallback to in-memory if file fails (though this shouldn't happen in this env)
-  db = new Database(":memory:");
-}
+// Supabase Client
+const supabaseUrl = process.env.SUPABASE_URL || "";
+const supabaseKey = process.env.SUPABASE_ANON_KEY || "";
+const supabase = createClient(supabaseUrl, supabaseKey);
+
 const ai = new GoogleGenAI({ apiKey: process.env.GEMINI_API_KEY });
-
-// Initialize Database
-db.exec(`
-  CREATE TABLE IF NOT EXISTS settings (
-    id INTEGER PRIMARY KEY CHECK (id = 1),
-    hotel_name TEXT DEFAULT 'Hills Hotel',
-    currency TEXT DEFAULT 'IQD'
-  );
-
-  CREATE TABLE IF NOT EXISTS categories (
-    id INTEGER PRIMARY KEY AUTOINCREMENT,
-    name TEXT NOT NULL,
-    slug TEXT UNIQUE NOT NULL
-  );
-
-  CREATE TABLE IF NOT EXISTS menu_items (
-    id INTEGER PRIMARY KEY AUTOINCREMENT,
-    category_id INTEGER,
-    name TEXT NOT NULL,
-    description TEXT,
-    translations TEXT, -- JSON string for { en, ar, tr, ku }
-    price REAL NOT NULL,
-    image_url TEXT,
-    available INTEGER DEFAULT 1,
-    FOREIGN KEY (category_id) REFERENCES categories (id)
-  );
-
-  CREATE TABLE IF NOT EXISTS orders (
-    id INTEGER PRIMARY KEY AUTOINCREMENT,
-    category_id INTEGER,
-    location TEXT NOT NULL,
-    items TEXT NOT NULL, -- JSON string
-    total_price REAL NOT NULL,
-    currency TEXT,
-    status TEXT DEFAULT 'pending',
-    created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
-    FOREIGN KEY (category_id) REFERENCES categories (id)
-  );
-`);
-
-// Seed Settings
-const settingsCount = db.prepare("SELECT COUNT(*) as count FROM settings").get() as { count: number };
-if (settingsCount.count === 0) {
-  db.prepare("INSERT INTO settings (id, hotel_name, currency) VALUES (1, ?, ?)").run("Hills Hotel", "IQD");
-}
-
-// Seed Categories if empty
-const categoryCount = db.prepare("SELECT COUNT(*) as count FROM categories").get() as { count: number };
-if (categoryCount.count === 0) {
-  db.prepare("INSERT INTO categories (name, slug) VALUES (?, ?)").run("رستوران", "restaurant");
-  db.prepare("INSERT INTO categories (name, slug) VALUES (?, ?)").run("کافه", "cafe");
-  db.prepare("INSERT INTO categories (name, slug) VALUES (?, ?)").run("لاندری", "laundry");
-}
 
 async function translateContent(text: string, description: string) {
   try {
@@ -118,20 +61,22 @@ async function startServer() {
   });
 
   // Settings API
-  api.get("/settings", (req, res) => {
+  api.get("/settings", async (req, res) => {
     try {
-      const settings = db.prepare("SELECT * FROM settings WHERE id = 1").get();
-      res.json(settings || { hotel_name: 'Hills Hotel', currency: 'IQD' });
+      const { data, error } = await supabase.from("settings").select("*").eq("id", 1).single();
+      if (error && error.code !== 'PGRST116') throw error;
+      res.json(data || { hotel_name: 'Hills Hotel', currency: 'IQD' });
     } catch (error) {
       console.error("Error fetching settings:", error);
       res.status(500).json({ error: "Failed to fetch settings" });
     }
   });
 
-  api.put("/settings", (req, res) => {
+  api.put("/settings", async (req, res) => {
     try {
       const { hotel_name, currency } = req.body;
-      db.prepare("UPDATE settings SET hotel_name = ?, currency = ? WHERE id = 1").run(hotel_name, currency);
+      const { error } = await supabase.from("settings").upsert({ id: 1, hotel_name, currency });
+      if (error) throw error;
       res.json({ success: true });
     } catch (error) {
       res.status(500).json({ error: error.message });
@@ -139,40 +84,52 @@ async function startServer() {
   });
 
   // Categories API
-  api.get("/categories", (req, res) => {
+  api.get("/categories", async (req, res) => {
     try {
-      const categories = db.prepare("SELECT * FROM categories").all();
-      res.json(categories);
+      const { data, error } = await supabase.from("categories").select("*");
+      if (error) throw error;
+      res.json(data);
     } catch (error) {
       console.error("Error fetching categories:", error);
       res.status(500).json({ error: "Failed to fetch categories" });
     }
   });
 
-  api.get("/menu/:categorySlug", (req, res) => {
+  api.get("/menu/:categorySlug", async (req, res) => {
     try {
       const { categorySlug } = req.params;
-      const items = db.prepare(`
-        SELECT m.* FROM menu_items m
-        JOIN categories c ON m.category_id = c.id
-        WHERE c.slug = ? AND m.available = 1
-      `).all(categorySlug);
-      res.json(items.map((i: any) => ({ ...i, translations: JSON.parse(i.translations || "{}") })));
+      
+      // First get category id
+      const { data: catData, error: catError } = await supabase.from("categories").select("id").eq("slug", categorySlug).single();
+      if (catError) throw catError;
+
+      const { data, error } = await supabase
+        .from("menu_items")
+        .select("*")
+        .eq("category_id", catData.id)
+        .eq("available", true);
+      
+      if (error) throw error;
+      res.json(data.map((i: any) => ({ ...i, translations: typeof i.translations === 'string' ? JSON.parse(i.translations) : i.translations })));
     } catch (error) {
       console.error(`Error fetching menu for ${req.params.categorySlug}:`, error);
       res.status(500).json({ error: "Failed to fetch menu items" });
     }
   });
 
-  api.get("/admin/menu/:categorySlug", (req, res) => {
+  api.get("/admin/menu/:categorySlug", async (req, res) => {
     try {
       const { categorySlug } = req.params;
-      const items = db.prepare(`
-        SELECT m.* FROM menu_items m
-        JOIN categories c ON m.category_id = c.id
-        WHERE c.slug = ?
-      `).all(categorySlug);
-      res.json(items.map((i: any) => ({ ...i, translations: JSON.parse(i.translations || "{}") })));
+      const { data: catData, error: catError } = await supabase.from("categories").select("id").eq("slug", categorySlug).single();
+      if (catError) throw catError;
+
+      const { data, error } = await supabase
+        .from("menu_items")
+        .select("*")
+        .eq("category_id", catData.id);
+      
+      if (error) throw error;
+      res.json(data.map((i: any) => ({ ...i, translations: typeof i.translations === 'string' ? JSON.parse(i.translations) : i.translations })));
     } catch (error) {
       res.status(500).json({ error: error.message });
     }
@@ -183,10 +140,12 @@ async function startServer() {
       const { category_id, name, description, price, image_url } = req.body;
       const translations = await translateContent(name, description);
       
-      const result = db.prepare("INSERT INTO menu_items (category_id, name, description, translations, price, image_url) VALUES (?, ?, ?, ?, ?, ?)").run(
-        category_id, name, description, JSON.stringify(translations), price, image_url
-      );
-      res.json({ id: result.lastInsertRowid });
+      const { data, error } = await supabase.from("menu_items").insert({
+        category_id, name, description, translations, price, image_url
+      }).select().single();
+      
+      if (error) throw error;
+      res.json({ id: data.id });
     } catch (error) {
       res.status(500).json({ error: error.message });
     }
@@ -197,72 +156,77 @@ async function startServer() {
       const { id } = req.params;
       const { name, description, price, image_url, available } = req.body;
       
-      const existing = db.prepare("SELECT name, description FROM menu_items WHERE id = ?").get(id) as any;
-      let translationsStr;
+      const { data: existing, error: fetchError } = await supabase.from("menu_items").select("name, description").eq("id", id).single();
+      if (fetchError) throw fetchError;
+
+      let translations;
       if (existing.name !== name || existing.description !== description) {
-        const translations = await translateContent(name, description);
-        translationsStr = JSON.stringify(translations);
+        translations = await translateContent(name, description);
       }
 
-      if (translationsStr) {
-        db.prepare("UPDATE menu_items SET name = ?, description = ?, translations = ?, price = ?, image_url = ?, available = ? WHERE id = ?").run(
-          name, description, translationsStr, price, image_url, available ? 1 : 0, id
-        );
-      } else {
-        db.prepare("UPDATE menu_items SET name = ?, description = ?, price = ?, image_url = ?, available = ? WHERE id = ?").run(
-          name, description, price, image_url, available ? 1 : 0, id
-        );
-      }
+      const updateData: any = { name, description, price, image_url, available };
+      if (translations) updateData.translations = translations;
+
+      const { error } = await supabase.from("menu_items").update(updateData).eq("id", id);
+      if (error) throw error;
+      
       res.json({ success: true });
     } catch (error) {
       res.status(500).json({ error: error.message });
     }
   });
 
-  api.delete("/admin/menu/:id", (req, res) => {
+  api.delete("/admin/menu/:id", async (req, res) => {
     try {
       const { id } = req.params;
-      db.prepare("DELETE FROM menu_items WHERE id = ?").run(id);
+      const { error } = await supabase.from("menu_items").delete().eq("id", id);
+      if (error) throw error;
       res.json({ success: true });
     } catch (error) {
       res.status(500).json({ error: error.message });
     }
   });
 
-  api.post("/orders", (req, res) => {
+  api.post("/orders", async (req, res) => {
     try {
       const { category_id, location, items, total_price, currency } = req.body;
-      const result = db.prepare("INSERT INTO orders (category_id, location, items, total_price, currency) VALUES (?, ?, ?, ?, ?)").run(
-        category_id, location, JSON.stringify(items), total_price, currency
-      );
-      const order = db.prepare("SELECT * FROM orders WHERE id = ?").get(result.lastInsertRowid);
-      io.emit("new_order", order);
-      res.json(order);
+      const { data, error } = await supabase.from("orders").insert({
+        category_id, location, items, total_price, currency
+      }).select().single();
+      
+      if (error) throw error;
+      io.emit("new_order", data);
+      res.json(data);
     } catch (error) {
       res.status(500).json({ error: error.message });
     }
   });
 
-  api.get("/admin/orders/:categorySlug", (req, res) => {
+  api.get("/admin/orders/:categorySlug", async (req, res) => {
     try {
       const { categorySlug } = req.params;
-      const orders = db.prepare(`
-        SELECT o.* FROM orders o
-        JOIN categories c ON o.category_id = c.id
-        WHERE c.slug = ?
-        ORDER BY o.created_at DESC
-      `).all(categorySlug);
-      res.json(orders.map((o: any) => ({ ...o, items: JSON.parse(o.items) })));
+      const { data: catData, error: catError } = await supabase.from("categories").select("id").eq("slug", categorySlug).single();
+      if (catError) throw catError;
+
+      const { data, error } = await supabase
+        .from("orders")
+        .select("*")
+        .eq("category_id", catData.id)
+        .order("created_at", { ascending: false });
+      
+      if (error) throw error;
+      res.json(data.map((o: any) => ({ ...o, items: typeof o.items === 'string' ? JSON.parse(o.items) : o.items })));
     } catch (error) {
       res.status(500).json({ error: error.message });
     }
   });
 
-  api.patch("/admin/orders/:id/status", (req, res) => {
+  api.patch("/admin/orders/:id/status", async (req, res) => {
     try {
       const { id } = req.params;
       const { status } = req.body;
-      db.prepare("UPDATE orders SET status = ? WHERE id = ?").run(status, id);
+      const { error } = await supabase.from("orders").update({ status }).eq("id", id);
+      if (error) throw error;
       res.json({ success: true });
     } catch (error) {
       res.status(500).json({ error: error.message });
