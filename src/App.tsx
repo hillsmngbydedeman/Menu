@@ -115,7 +115,10 @@ const Navbar = ({ title, showBack = false, admin = false, lang, setLang }: { tit
 const LocationSelector = ({ lang, onSelect }: { lang: string, onSelect: (loc: { type: string, roomNumber?: string }) => void }) => {
   const [type, setType] = useState<string | null>(null);
   const [roomNumber, setRoomNumber] = useState('');
-  const t = (key: string) => UI_STRINGS[key][lang] || UI_STRINGS[key]['en'];
+  const t = (key: string) => {
+    if (!key || !UI_STRINGS[key]) return key;
+    return UI_STRINGS[key][lang] || UI_STRINGS[key]['en'] || key;
+  };
 
   const handleContinue = () => {
     if (type === 'room' && !roomNumber) return;
@@ -203,7 +206,10 @@ const Home = ({ lang, setLang, settings, userLocation, setUserLocation }: {
   setUserLocation: (l: any) => void
 }) => {
   const [categories, setCategories] = useState<Category[]>([]);
-  const t = (key: string) => UI_STRINGS[key][lang] || UI_STRINGS[key]['en'];
+  const t = (key: string) => {
+    if (!key || !UI_STRINGS[key]) return key;
+    return UI_STRINGS[key][lang] || UI_STRINGS[key]['en'] || key;
+  };
 
   useEffect(() => {
     fetch('/api/categories').then(res => res.json()).then(setCategories);
@@ -227,9 +233,9 @@ const Home = ({ lang, setLang, settings, userLocation, setUserLocation }: {
     }
   };
 
-  const locationLabel = userLocation?.type === 'room' 
-    ? `${t('room')} ${userLocation.roomNumber}` 
-    : t(userLocation?.type || '');
+  const locationLabel = userLocation 
+    ? (userLocation.type === 'room' ? `${t('room')} ${userLocation.roomNumber}` : t(userLocation.type))
+    : '---';
 
   return (
     <div className="min-h-screen bg-slate-50">
@@ -282,7 +288,10 @@ const Menu = ({ lang, setLang, settings, userLocation }: {
   const [cart, setCart] = useState<Record<number, number>>({});
   const [categories, setCategories] = useState<Category[]>([]);
   const navigate = useNavigate();
-  const t = (key: string) => UI_STRINGS[key][lang] || UI_STRINGS[key]['en'];
+  const t = (key: string) => {
+    if (!key || !UI_STRINGS[key]) return key;
+    return UI_STRINGS[key][lang] || UI_STRINGS[key]['en'] || key;
+  };
 
   useEffect(() => {
     if (!userLocation) {
@@ -401,7 +410,10 @@ const Menu = ({ lang, setLang, settings, userLocation }: {
 
 const AdminDashboard = ({ lang, setLang }: { lang: string, setLang: (l: string) => void }) => {
   const [categories, setCategories] = useState<Category[]>([]);
-  const t = (key: string) => UI_STRINGS[key][lang] || UI_STRINGS[key]['en'];
+  const t = (key: string) => {
+    if (!key || !UI_STRINGS[key]) return key;
+    return UI_STRINGS[key][lang] || UI_STRINGS[key]['en'] || key;
+  };
 
   useEffect(() => {
     fetch('/api/categories').then(res => res.json()).then(setCategories);
@@ -445,7 +457,10 @@ const AdminOrders = ({ lang, setLang, settings }: { lang: string, setLang: (l: s
   const { slug } = useParams();
   const [orders, setOrders] = useState<Order[]>([]);
   const [categories, setCategories] = useState<Category[]>([]);
-  const t = (key: string) => UI_STRINGS[key][lang] || UI_STRINGS[key]['en'];
+  const t = (key: string) => {
+    if (!key || !UI_STRINGS[key]) return key;
+    return UI_STRINGS[key][lang] || UI_STRINGS[key]['en'] || key;
+  };
 
   const fetchOrders = () => {
     fetch(`/api/admin/orders/${slug}`).then(res => res.json()).then(setOrders);
@@ -532,7 +547,10 @@ const AdminMenu = ({ lang, setLang, settings }: { lang: string, setLang: (l: str
   const [categories, setCategories] = useState<Category[]>([]);
   const [isModalOpen, setIsModalOpen] = useState(false);
   const [editingItem, setEditingItem] = useState<Partial<MenuItem> | null>(null);
-  const t = (key: string) => UI_STRINGS[key][lang] || UI_STRINGS[key]['en'];
+  const t = (key: string) => {
+    if (!key || !UI_STRINGS[key]) return key;
+    return UI_STRINGS[key][lang] || UI_STRINGS[key]['en'] || key;
+  };
 
   const fetchItems = () => {
     fetch(`/api/admin/menu/${slug}`).then(res => res.json()).then(setItems);
@@ -605,7 +623,10 @@ const AdminMenu = ({ lang, setLang, settings }: { lang: string, setLang: (l: str
 const AdminSettings = ({ lang, setLang, settings, fetchSettings }: { lang: string, setLang: (l: string) => void, settings: HotelSettings | null, fetchSettings: () => void }) => {
   const [hotelName, setHotelName] = useState(settings?.hotel_name || '');
   const [currency, setCurrency] = useState(settings?.currency || 'IQD');
-  const t = (key: string) => UI_STRINGS[key][lang] || UI_STRINGS[key]['en'];
+  const t = (key: string) => {
+    if (!key || !UI_STRINGS[key]) return key;
+    return UI_STRINGS[key][lang] || UI_STRINGS[key]['en'] || key;
+  };
 
   const handleSave = async (e: React.FormEvent) => {
     e.preventDefault();
