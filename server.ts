@@ -118,7 +118,7 @@ async function seedDatabase() {
 }
 
 async function startServer() {
-  await seedDatabase();
+  console.log(`[SERVER] Starting server initialization... NODE_ENV=${process.env.NODE_ENV}`);
   const app = express();
   const httpServer = createServer(app);
   const io = new Server(httpServer, {
@@ -127,24 +127,23 @@ async function startServer() {
 
   app.use(express.json());
 
-  // Global request logging
+  // Global request logging - LOG EVERYTHING for debugging
   app.use((req, res, next) => {
-    if (req.url.startsWith('/api') || req.url.startsWith('/health')) {
-      console.log(`[SERVER] ${req.method} ${req.url}`);
-    }
+    console.log(`[REQUEST] ${req.method} ${req.url}`);
     next();
   });
 
-  // --- DIRECT API ROUTES (No Router for maximum reliability) ---
+  // --- API ROUTER ---
+  const apiRouter = express.Router();
 
   // Health check
-  app.get("/api/health", (req, res) => {
+  apiRouter.get("/health", (req, res) => {
     res.json({ status: "ok", time: new Date().toISOString() });
   });
 
   // Settings API
-  app.get("/api/settings", async (req, res) => {
-    console.log("[API] GET /api/settings");
+  apiRouter.get("/settings", async (req, res) => {
+    console.log("[API] GET /settings");
     try {
       const { data, error } = await supabase.from("settings").select("*").eq("id", 1).single();
       if (error && error.code !== 'PGRST116') throw error;
@@ -155,8 +154,8 @@ async function startServer() {
     }
   });
 
-  app.put("/api/settings", async (req, res) => {
-    console.log("[API] PUT /api/settings");
+  apiRouter.put("/settings", async (req, res) => {
+    console.log("[API] PUT /settings");
     try {
       const { hotel_name, currency } = req.body;
       const { error } = await supabase.from("settings").upsert({ id: 1, hotel_name, currency });
@@ -168,8 +167,8 @@ async function startServer() {
   });
 
   // Categories API
-  app.get("/api/categories", async (req, res) => {
-    console.log("[API] GET /api/categories");
+  apiRouter.get("/categories", async (req, res) => {
+    console.log("[API] GET /categories");
     try {
       const { data, error } = await supabase.from("categories").select("*");
       if (error) throw error;
@@ -180,8 +179,8 @@ async function startServer() {
     }
   });
 
-  app.get("/api/menu/:categorySlug", async (req, res) => {
-    console.log(`[API] GET /api/menu/${req.params.categorySlug}`);
+  apiRouter.get("/menu/:categorySlug", async (req, res) => {
+    console.log(`[API] GET /menu/${req.params.categorySlug}`);
     try {
       const { categorySlug } = req.params;
       const { data: catData, error: catError } = await supabase.from("categories").select("id").eq("slug", categorySlug).single();
@@ -201,7 +200,8 @@ async function startServer() {
     }
   });
 
-  app.get("/api/admin/menu/:categorySlug", async (req, res) => {
+  apiRouter.get("/admin/menu/:categorySlug", async (req, res) => {
+    console.log(`[API] GET /admin/menu/${req.params.categorySlug}`);
     try {
       const { categorySlug } = req.params;
       const { data: catData, error: catError } = await supabase.from("categories").select("id").eq("slug", categorySlug).single();
@@ -219,7 +219,8 @@ async function startServer() {
     }
   });
 
-  app.post("/api/admin/menu", async (req, res) => {
+  apiRouter.post("/admin/menu", async (req, res) => {
+    console.log("[API] POST /admin/menu");
     try {
       const { category_id, name, description, price, image_url } = req.body;
       const translations = await translateContent(name, description);
@@ -235,7 +236,8 @@ async function startServer() {
     }
   });
 
-  app.put("/api/admin/menu/:id", async (req, res) => {
+  apiRouter.put("/admin/menu/:id", async (req, res) => {
+    console.log(`[API] PUT /admin/menu/${req.params.id}`);
     try {
       const { id } = req.params;
       const { name, description, price, image_url, available } = req.body;
@@ -260,7 +262,8 @@ async function startServer() {
     }
   });
 
-  app.delete("/api/admin/menu/:id", async (req, res) => {
+  apiRouter.delete("/admin/menu/:id", async (req, res) => {
+    console.log(`[API] DELETE /admin/menu/${req.params.id}`);
     try {
       const { id } = req.params;
       const { error } = await supabase.from("menu_items").delete().eq("id", id);
@@ -271,7 +274,8 @@ async function startServer() {
     }
   });
 
-  app.post("/api/orders", async (req, res) => {
+  apiRouter.post("/orders", async (req, res) => {
+    console.log("[API] POST /orders");
     try {
       const { category_id, location, items, total_price, currency } = req.body;
       const { data, error } = await supabase.from("orders").insert({
@@ -286,7 +290,8 @@ async function startServer() {
     }
   });
 
-  app.get("/api/admin/orders/:categorySlug", async (req, res) => {
+  apiRouter.get("/admin/orders/:categorySlug", async (req, res) => {
+    console.log(`[API] GET /admin/orders/${req.params.categorySlug}`);
     try {
       const { categorySlug } = req.params;
       const { data: catData, error: catError } = await supabase.from("categories").select("id").eq("slug", categorySlug).single();
@@ -305,7 +310,8 @@ async function startServer() {
     }
   });
 
-  app.patch("/api/admin/orders/:id/status", async (req, res) => {
+  apiRouter.patch("/admin/orders/:id/status", async (req, res) => {
+    console.log(`[API] PATCH /admin/orders/${req.params.id}/status`);
     try {
       const { id } = req.params;
       const { status } = req.body;
@@ -316,6 +322,9 @@ async function startServer() {
       res.status(500).json({ error: error.message });
     }
   });
+
+  // Mount API Router
+  app.use("/api", apiRouter);
 
   // Catch-all for any /api requests that didn't match a route above
   app.all("/api/*", (req, res) => {
@@ -330,12 +339,14 @@ async function startServer() {
 
   // Vite middleware for development
   if (process.env.NODE_ENV !== "production") {
+    console.log("[SERVER] Development mode: Initializing Vite...");
     const vite = await createViteServer({
       server: { middlewareMode: true },
       appType: "spa",
     });
     app.use(vite.middlewares);
   } else {
+    console.log("[SERVER] Production mode: Serving static files from dist...");
     app.use(express.static(path.join(__dirname, "dist")));
     app.get("*", (req, res) => {
       res.sendFile(path.join(__dirname, "dist", "index.html"));
@@ -350,8 +361,11 @@ async function startServer() {
 
   const PORT = 3000;
   httpServer.listen(PORT, "0.0.0.0", () => {
-    console.log(`Server running on http://0.0.0.0:${PORT}`);
-    console.log(`Environment: ${process.env.NODE_ENV || 'development'}`);
+    console.log(`[SERVER] Server running on http://0.0.0.0:${PORT}`);
+    console.log(`[SERVER] Environment: ${process.env.NODE_ENV || 'development'}`);
+    
+    // Run seeding in background
+    seedDatabase().catch(err => console.error("[SEED] Background seeding failed:", err));
   });
 }
 
