@@ -39,7 +39,7 @@ const LANGUAGES = {
 
 const UI_STRINGS: Record<string, Record<string, string>> = {
   welcome: { en: 'Welcome', ar: 'أهلاً بك', tr: 'Hoş geldiniz', ku: 'بەخێربێن' },
-  select_service: { en: 'Please select a service', ar: 'يرجى اختيار الخدمة', tr: 'Lütfen یک سرویس انتخاب کنید', ku: 'تکایە خزمەتگوزارییەک هەڵبژێرە' },
+  select_service: { en: 'Please select a service', ar: 'يرجى اختيار الخدمة', tr: 'Lütfen bir servis seçin', ku: 'تکایە خزمەتگوزارییەک هەڵبژێرە' },
   location: { en: 'Your Location', ar: 'موقعك', tr: 'Konumunuz', ku: 'شوێنی تۆ' },
   submit_order: { en: 'Submit Order', ar: 'إرسال الطلب', tr: 'Siparişi Gönder', ku: 'ناردنی داواکاری' },
   order_success: { en: 'Order submitted successfully', ar: 'تم ارسال طلبك بنجاح', tr: 'Siparişiniz başarıyla gönderildi', ku: 'داواکارییەکەت بە سەرکەوتوویی ناردرا' },
@@ -203,19 +203,22 @@ const Home = ({ lang, setLang, settings, userLocation, setUserLocation }: {
   setUserLocation: (l: any) => void
 }) => {
   const [categories, setCategories] = useState<Category[]>([]);
+  const [loading, setLoading] = useState(true);
   const t = (key: string) => {
     if (!key || !UI_STRINGS[key]) return key;
     return UI_STRINGS[key][lang] || UI_STRINGS[key]['en'] || key;
   };
 
   useEffect(() => {
+    setLoading(true);
     fetch('/api/categories')
       .then(res => {
         if (!res.ok) throw new Error(`HTTP error! status: ${res.status}`);
         return res.json();
       })
       .then(setCategories)
-      .catch(err => console.error("Error fetching categories:", err));
+      .catch(err => console.error("Error fetching categories:", err))
+      .finally(() => setLoading(false));
     document.body.dir = LANGUAGES[lang as keyof typeof LANGUAGES].dir;
   }, [lang]);
 
@@ -258,7 +261,15 @@ const Home = ({ lang, setLang, settings, userLocation, setUserLocation }: {
         </div>
 
         <div className="grid gap-4">
-          {filteredCategories.map((cat) => (
+          {loading ? (
+            <div className="flex justify-center p-12">
+              <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-indigo-600"></div>
+            </div>
+          ) : filteredCategories.length === 0 ? (
+            <div className="text-center p-12 bg-white rounded-2xl border-2 border-dashed border-slate-200">
+              <p className="text-slate-400">No services available for this location.</p>
+            </div>
+          ) : filteredCategories.map((cat) => (
             <Link 
               key={cat.id} 
               to={`/menu/${cat.slug}`}
@@ -790,6 +801,14 @@ export default function App() {
     return saved ? JSON.parse(saved) : null;
   });
 
+  useEffect(() => {
+    if (userLocation) {
+      localStorage.setItem('userLocation', JSON.stringify(userLocation));
+    } else {
+      localStorage.removeItem('userLocation');
+    }
+  }, [userLocation]);
+
   const fetchSettings = () => {
     fetch('/api/settings')
       .then(res => {
@@ -803,14 +822,6 @@ export default function App() {
   useEffect(() => {
     fetchSettings();
   }, []);
-
-  useEffect(() => {
-    if (userLocation) {
-      localStorage.setItem('userLocation', JSON.stringify(userLocation));
-    } else {
-      localStorage.removeItem('userLocation');
-    }
-  }, [userLocation]);
 
   return (
     <BrowserRouter>
